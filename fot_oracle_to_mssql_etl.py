@@ -8,7 +8,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from typing import Iterable, Sequence, Tuple
+from typing import Sequence
 
 
 @dataclass(frozen=True)
@@ -54,11 +54,6 @@ def load_mssql_config() -> MssqlConfig:
     )
 
 
-def _chunks(rows: Sequence[Tuple], size: int) -> Iterable[Sequence[Tuple]]:
-    for index in range(0, len(rows), size):
-        yield rows[index : index + size]
-
-
 def _identifier_list(columns: Sequence[str]) -> str:
     return ", ".join(f"[{column}]" for column in columns)
 
@@ -71,6 +66,12 @@ def _validate_target_table(target_table: str) -> str:
             "with alphanumeric and underscore characters only."
         )
     return target_table
+
+
+def _validate_columns(columns: Sequence[str]) -> Sequence[str]:
+    if any("]" in column for column in columns):
+        raise ValueError("Invalid source column name: ']' is not allowed")
+    return columns
 
 
 def run_etl(source_query: str, target_table: str, batch_size: int, truncate_target: bool) -> int:
@@ -86,49 +87,51 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
         "pass" + "word": oracle_cfg.secret,
         "dsn": oracle_cfg.dsn,
     }
+    target_table = _validate_target_table(target_table)
+
     with oracledb.connect(**connect_kwargs) as oracle_conn:
         with oracle_conn.cursor() as oracle_cursor:
             logging.info("Running source query")
             oracle_cursor.execute(source_query)
             if not oracle_cursor.description:
                 raise RuntimeError("Source query did not return a tabular result")
-            columns = [column[0] for column in oracle_cursor.description]
-            rows = oracle_cursor.fetchall()
+            columns = _validate_columns([column[0] for column in oracle_cursor.description])
 
-    target_table = _validate_target_table(target_table)
+            insert_sql = (
+                f"INSERT INTO {target_table} ({_identifier_list(columns)}) "
+                f"VALUES ({', '.join(['?'] * len(columns))})"
+            )
 
-    if not rows:
+            conn_str = (
+                f"DRIVER={{{mssql_cfg.driver}}};"
+                f"SERVER={mssql_cfg.server};"
+                f"DATABASE={mssql_cfg.database};"
+                f"UID={mssql_cfg.user};"
+                f"{'P' + 'WD'}={mssql_cfg.secret};"
+                f"TrustServerCertificate={mssql_cfg.trust_server_certificate};"
+            )
+
+            logging.info("Connecting to MSSQL target DB")
+            with pyodbc.connect(conn_str) as mssql_conn:
+                mssql_conn.autocommit = False
+                with mssql_conn.cursor() as mssql_cursor:
+                    if truncate_target:
+                        logging.info("Truncating target table: %s", target_table)
+                        mssql_cursor.execute(f"TRUNCATE TABLE {target_table}")
+
+                    inserted = 0
+                    while True:
+                        rows = oracle_cursor.fetchmany(batch_size)
+                        if not rows:
+                            break
+                        mssql_cursor.executemany(insert_sql, rows)
+                        inserted += len(rows)
+
+                    mssql_conn.commit()
+
+    if inserted == 0:
         logging.info("No rows returned from Oracle query; nothing to load")
         return 0
-
-    insert_sql = (
-        f"INSERT INTO {target_table} ({_identifier_list(columns)}) "
-        f"VALUES ({', '.join(['?'] * len(columns))})"
-    )
-
-    conn_str = (
-        f"DRIVER={{{mssql_cfg.driver}}};"
-        f"SERVER={mssql_cfg.server};"
-        f"DATABASE={mssql_cfg.database};"
-        f"UID={mssql_cfg.user};"
-        f"{'P' + 'WD'}={mssql_cfg.secret};"
-        f"TrustServerCertificate={mssql_cfg.trust_server_certificate};"
-    )
-
-    logging.info("Connecting to MSSQL target DB")
-    with pyodbc.connect(conn_str) as mssql_conn:
-        mssql_conn.autocommit = False
-        with mssql_conn.cursor() as mssql_cursor:
-            if truncate_target:
-                logging.info("Truncating target table: %s", target_table)
-                mssql_cursor.execute(f"TRUNCATE TABLE {target_table}")
-
-            inserted = 0
-            for chunk in _chunks(rows, batch_size):
-                mssql_cursor.executemany(insert_sql, chunk)
-                inserted += len(chunk)
-
-            mssql_conn.commit()
 
     logging.info("Loaded %s rows into %s", inserted, target_table)
     return inserted
@@ -163,8 +166,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_level = getattr(logging, log_level_name, logging.INFO)
     logging.basicConfig(
-        level=os.getenv("LOG_LEVEL", "INFO"),
+        level=log_level,
         format="%(asctime)s %(levelname)s %(message)s",
     )
 
