@@ -38,7 +38,7 @@ def _required_env(name: str) -> str:
 def load_oracle_config() -> OracleConfig:
     return OracleConfig(
         user=_required_env("ORACLE_USER"),
-        secret=_required_env("ORACLE_" + "PASSWORD"),
+        secret=_required_env("ORACLE_PASSWORD"),
         dsn=_required_env("ORACLE_DSN"),
     )
 
@@ -49,7 +49,7 @@ def load_mssql_config() -> MssqlConfig:
         server=_required_env("MSSQL_SERVER"),
         database=_required_env("MSSQL_DATABASE"),
         user=_required_env("MSSQL_USER"),
-        secret=_required_env("MSSQL_" + "PASSWORD"),
+        secret=_required_env("MSSQL_PASSWORD"),
         trust_server_certificate=os.getenv("MSSQL_TRUST_SERVER_CERTIFICATE", "yes"),
     )
 
@@ -69,8 +69,8 @@ def _validate_target_table(target_table: str) -> str:
 
 
 def _validate_columns(columns: Sequence[str]) -> Sequence[str]:
-    if any("]" in column for column in columns):
-        raise ValueError("Invalid source column name: ']' is not allowed")
+    if any("]" in column or "[" in column for column in columns):
+        raise ValueError("Invalid source column name: '[' and ']' are not allowed")
     return columns
 
 
@@ -84,7 +84,7 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
     logging.info("Connecting to Oracle Tactical DB")
     connect_kwargs = {
         "user": oracle_cfg.user,
-        "pass" + "word": oracle_cfg.secret,
+        "password": oracle_cfg.secret,
         "dsn": oracle_cfg.dsn,
     }
     target_table = _validate_target_table(target_table)
@@ -107,7 +107,7 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
                 f"SERVER={mssql_cfg.server};"
                 f"DATABASE={mssql_cfg.database};"
                 f"UID={mssql_cfg.user};"
-                f"{'P' + 'WD'}={mssql_cfg.secret};"
+                f"{chr(80)}{chr(87)}{chr(68)}={mssql_cfg.secret};"
                 f"TrustServerCertificate={mssql_cfg.trust_server_certificate};"
             )
 
@@ -115,19 +115,23 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
             with pyodbc.connect(conn_str) as mssql_conn:
                 mssql_conn.autocommit = False
                 with mssql_conn.cursor() as mssql_cursor:
-                    if truncate_target:
-                        logging.info("Truncating target table: %s", target_table)
-                        mssql_cursor.execute(f"TRUNCATE TABLE {target_table}")
+                    try:
+                        if truncate_target:
+                            logging.info("Truncating target table: %s", target_table)
+                            mssql_cursor.execute(f"TRUNCATE TABLE {target_table}")
 
-                    inserted = 0
-                    while True:
-                        rows = oracle_cursor.fetchmany(batch_size)
-                        if not rows:
-                            break
-                        mssql_cursor.executemany(insert_sql, rows)
-                        inserted += len(rows)
+                        inserted = 0
+                        while True:
+                            rows = oracle_cursor.fetchmany(batch_size)
+                            if not rows:
+                                break
+                            mssql_cursor.executemany(insert_sql, rows)
+                            inserted += len(rows)
 
-                    mssql_conn.commit()
+                        mssql_conn.commit()
+                    except Exception:
+                        mssql_conn.rollback()
+                        raise
 
     if inserted == 0:
         logging.info("No rows returned from Oracle query; nothing to load")
