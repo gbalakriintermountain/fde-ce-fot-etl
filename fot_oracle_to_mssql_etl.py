@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import re
 from dataclasses import dataclass
 from typing import Iterable, Sequence, Tuple
 
@@ -62,6 +63,16 @@ def _identifier_list(columns: Sequence[str]) -> str:
     return ", ".join(f"[{column}]" for column in columns)
 
 
+def _validate_target_table(target_table: str) -> str:
+    pattern = r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*){0,2}$"
+    if not re.fullmatch(pattern, target_table):
+        raise ValueError(
+            "Invalid --target-table format. Use identifiers like schema.table "
+            "with alphanumeric and underscore characters only."
+        )
+    return target_table
+
+
 def run_etl(source_query: str, target_table: str, batch_size: int, truncate_target: bool) -> int:
     import oracledb
     import pyodbc
@@ -79,10 +90,12 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
         with oracle_conn.cursor() as oracle_cursor:
             logging.info("Running source query")
             oracle_cursor.execute(source_query)
-            rows = oracle_cursor.fetchall()
             if not oracle_cursor.description:
                 raise RuntimeError("Source query did not return a tabular result")
             columns = [column[0] for column in oracle_cursor.description]
+            rows = oracle_cursor.fetchall()
+
+    target_table = _validate_target_table(target_table)
 
     if not rows:
         logging.info("No rows returned from Oracle query; nothing to load")

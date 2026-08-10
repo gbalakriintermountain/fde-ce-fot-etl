@@ -2,7 +2,7 @@
 
 Festival Of Trees data-upload ETL from Oracle Tactical DB (Databricks-loaded source data) to MSSQL is implemented in:
 
-- `/home/runner/work/fde-ce-fot-etl/fde-ce-fot-etl/fot_oracle_to_mssql_etl.py`
+- `./fot_oracle_to_mssql_etl.py`
 
 ## Required environment variables
 
@@ -19,7 +19,7 @@ Festival Of Trees data-upload ETL from Oracle Tactical DB (Databricks-loaded sou
 ## Run
 
 ```bash
-python /home/runner/work/fde-ce-fot-etl/fde-ce-fot-etl/fot_oracle_to_mssql_etl.py \
+python ./fot_oracle_to_mssql_etl.py \
   --source-query "SELECT * FROM TACTICAL.FESTIVAL_OF_TREES_UPLOAD" \
   --target-table "dbo.FestivalOfTreesUpload" \
   --batch-size 1000 \
