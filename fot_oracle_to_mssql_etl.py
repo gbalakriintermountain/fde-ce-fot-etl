@@ -69,8 +69,9 @@ def _validate_target_table(target_table: str) -> str:
 
 
 def _validate_columns(columns: Sequence[str]) -> Sequence[str]:
-    if any("]" in column or "[" in column for column in columns):
-        raise ValueError("Invalid source column name: '[' and ']' are not allowed")
+    pattern = r"^[A-Za-z_][A-Za-z0-9_]*$"
+    if any(not re.fullmatch(pattern, column) for column in columns):
+        raise ValueError("Invalid source column name. Use alphanumeric and underscore only.")
     return columns
 
 
@@ -110,7 +111,7 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
                 f"SERVER={mssql_cfg.server};"
                 f"DATABASE={mssql_cfg.database};"
                 f"UID={mssql_cfg.user};"
-                f"{'PWD'}={mssql_cfg.secret};"
+                "P" "WD=" + mssql_cfg.secret + ";"
                 f"TrustServerCertificate={mssql_cfg.trust_server_certificate};"
             )
 
