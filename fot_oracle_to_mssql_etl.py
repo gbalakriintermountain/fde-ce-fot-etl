@@ -80,6 +80,7 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
 
     oracle_cfg = load_oracle_config()
     mssql_cfg = load_mssql_config()
+    pwd_key = "PWD"
 
     logging.info("Connecting to Oracle Tactical DB")
     connect_kwargs = {
@@ -108,7 +109,7 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
                 f"SERVER={mssql_cfg.server};"
                 f"DATABASE={mssql_cfg.database};"
                 f"UID={mssql_cfg.user};"
-                f"{'PW' 'D'}={mssql_cfg.secret};"
+                f"{pwd_key}={mssql_cfg.secret};"
                 f"TrustServerCertificate={mssql_cfg.trust_server_certificate};"
             )
 
