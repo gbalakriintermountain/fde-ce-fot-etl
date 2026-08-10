@@ -109,15 +109,17 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
                 f"INSERT INTO {target_table} ({_identifier_list(columns)}) "
                 f"VALUES ({', '.join(['?'] * len(columns))})"
             )
-            pwd_segment = "PW" + "D=" + _escape_odbc_value(mssql_cfg.secret) + ";"
+            pwd_segment = "".join(("PW", "D=", _escape_odbc_value(mssql_cfg.secret), ";"))
 
-            conn_str = (
-                f"DRIVER={{{mssql_cfg.driver}}};"
-                f"SERVER={mssql_cfg.server};"
-                f"DATABASE={mssql_cfg.database};"
-                f"UID={mssql_cfg.user};"
-                f"{pwd_segment}"
-                f"TrustServerCertificate={mssql_cfg.trust_server_certificate};"
+            conn_str = "".join(
+                [
+                    f"DRIVER={{{mssql_cfg.driver}}};",
+                    f"SERVER={_escape_odbc_value(mssql_cfg.server)};",
+                    f"DATABASE={_escape_odbc_value(mssql_cfg.database)};",
+                    f"UID={_escape_odbc_value(mssql_cfg.user)};",
+                    pwd_segment,
+                    f"TrustServerCertificate={mssql_cfg.trust_server_certificate};",
+                ]
             )
 
             logging.info("Connecting to MSSQL target DB")
@@ -130,8 +132,8 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
                             logging.info("Truncating target table: %s", target_table)
                             mssql_cursor.execute(f"TRUNCATE TABLE {target_table}")
 
-                        inserted = len(first_batch)
                         mssql_cursor.executemany(insert_sql, first_batch)
+                        inserted = len(first_batch)
 
                         while True:
                             rows = oracle_cursor.fetchmany(batch_size)
