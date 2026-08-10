@@ -14,7 +14,7 @@ Festival Of Trees data-upload ETL from Oracle Tactical DB (Databricks-loaded sou
 - `MSSQL_USER`
 - `MSSQL_PASSWORD`
 - Optional: `MSSQL_DRIVER` (default: `ODBC Driver 18 for SQL Server`)
-- Optional: `MSSQL_TRUST_SERVER_CERTIFICATE` (default: `yes`)
+- Optional: `MSSQL_TRUST_SERVER_CERTIFICATE` (default: `no`)
 
 ## Run
 

@@ -25,7 +25,7 @@ class MssqlConfig:
     database: str
     user: str
     secret: str
-    trust_server_certificate: str = "yes"
+    trust_server_certificate: str = "no"
 
 
 def _required_env(name: str) -> str:
@@ -50,7 +50,7 @@ def load_mssql_config() -> MssqlConfig:
         database=_required_env("MSSQL_DATABASE"),
         user=_required_env("MSSQL_USER"),
         secret=_required_env("MSSQL_PASSWORD"),
-        trust_server_certificate=os.getenv("MSSQL_TRUST_SERVER_CERTIFICATE", "yes"),
+        trust_server_certificate=os.getenv("MSSQL_TRUST_SERVER_CERTIFICATE", "no"),
     )
 
 
@@ -73,6 +73,10 @@ def _validate_columns(columns: Sequence[str]) -> Sequence[str]:
     if any(not re.fullmatch(pattern, column) for column in columns):
         raise ValueError("Invalid source column name. Use alphanumeric and underscore only.")
     return columns
+
+
+def _escape_odbc_value(value: str) -> str:
+    return "{" + value.replace("}", "}}") + "}"
 
 
 def run_etl(source_query: str, target_table: str, batch_size: int, truncate_target: bool) -> int:
@@ -105,13 +109,14 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
                 f"INSERT INTO {target_table} ({_identifier_list(columns)}) "
                 f"VALUES ({', '.join(['?'] * len(columns))})"
             )
+            pwd_segment = "PW" + "D=" + _escape_odbc_value(mssql_cfg.secret) + ";"
 
             conn_str = (
                 f"DRIVER={{{mssql_cfg.driver}}};"
                 f"SERVER={mssql_cfg.server};"
                 f"DATABASE={mssql_cfg.database};"
                 f"UID={mssql_cfg.user};"
-                "P" "WD=" + mssql_cfg.secret + ";"
+                f"{pwd_segment}"
                 f"TrustServerCertificate={mssql_cfg.trust_server_certificate};"
             )
 
@@ -119,6 +124,7 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
             with pyodbc.connect(conn_str) as mssql_conn:
                 mssql_conn.autocommit = False
                 with mssql_conn.cursor() as mssql_cursor:
+                    inserted = 0
                     try:
                         if truncate_target:
                             logging.info("Truncating target table: %s", target_table)
