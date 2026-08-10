@@ -79,6 +79,12 @@ def _escape_odbc_value(value: str) -> str:
     return "{" + value.replace("}", "}}") + "}"
 
 
+def _validate_odbc_segment(name: str, value: str) -> str:
+    if any(char in value for char in (";", "{", "}")):
+        raise ValueError(f"Invalid {name} value for ODBC connection string")
+    return value
+
+
 def run_etl(source_query: str, target_table: str, batch_size: int, truncate_target: bool) -> int:
     import oracledb
     import pyodbc
@@ -92,6 +98,7 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
         "password": oracle_cfg.secret,
         "dsn": oracle_cfg.dsn,
     }
+    inserted = 0
     target_table = _validate_target_table(target_table)
     with oracledb.connect(**connect_kwargs) as oracle_conn:
         with oracle_conn.cursor() as oracle_cursor:
@@ -114,9 +121,9 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
             conn_str = "".join(
                 [
                     f"DRIVER={{{mssql_cfg.driver}}};",
-                    f"SERVER={_escape_odbc_value(mssql_cfg.server)};",
-                    f"DATABASE={_escape_odbc_value(mssql_cfg.database)};",
-                    f"UID={_escape_odbc_value(mssql_cfg.user)};",
+                    f"SERVER={_validate_odbc_segment('MSSQL_SERVER', mssql_cfg.server)};",
+                    f"DATABASE={_validate_odbc_segment('MSSQL_DATABASE', mssql_cfg.database)};",
+                    f"UID={_validate_odbc_segment('MSSQL_USER', mssql_cfg.user)};",
                     pwd_segment,
                     f"TrustServerCertificate={mssql_cfg.trust_server_certificate};",
                 ]
