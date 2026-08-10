@@ -1,0 +1,2 @@
+oracledb>=2.2.0
+pyodbc>=5.1.0
