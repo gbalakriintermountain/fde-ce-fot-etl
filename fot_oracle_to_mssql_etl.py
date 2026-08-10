@@ -80,7 +80,6 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
 
     oracle_cfg = load_oracle_config()
     mssql_cfg = load_mssql_config()
-    pwd_key = "PWD"
 
     logging.info("Connecting to Oracle Tactical DB")
     connect_kwargs = {
@@ -89,8 +88,6 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
         "dsn": oracle_cfg.dsn,
     }
     target_table = _validate_target_table(target_table)
-    inserted = 0
-
     with oracledb.connect(**connect_kwargs) as oracle_conn:
         with oracle_conn.cursor() as oracle_cursor:
             logging.info("Running source query")
@@ -98,6 +95,10 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
             if not oracle_cursor.description:
                 raise RuntimeError("Source query did not return a tabular result")
             columns = _validate_columns([column[0] for column in oracle_cursor.description])
+            first_batch = oracle_cursor.fetchmany(batch_size)
+            if not first_batch:
+                logging.info("No rows returned from Oracle query; nothing to load")
+                return 0
 
             insert_sql = (
                 f"INSERT INTO {target_table} ({_identifier_list(columns)}) "
@@ -109,7 +110,7 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
                 f"SERVER={mssql_cfg.server};"
                 f"DATABASE={mssql_cfg.database};"
                 f"UID={mssql_cfg.user};"
-                f"{pwd_key}={mssql_cfg.secret};"
+                f"{'PWD'}={mssql_cfg.secret};"
                 f"TrustServerCertificate={mssql_cfg.trust_server_certificate};"
             )
 
@@ -122,6 +123,9 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
                             logging.info("Truncating target table: %s", target_table)
                             mssql_cursor.execute(f"TRUNCATE TABLE {target_table}")
 
+                        inserted = len(first_batch)
+                        mssql_cursor.executemany(insert_sql, first_batch)
+
                         while True:
                             rows = oracle_cursor.fetchmany(batch_size)
                             if not rows:
@@ -133,10 +137,6 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
                     except Exception:
                         mssql_conn.rollback()
                         raise
-
-    if inserted == 0:
-        logging.info("No rows returned from Oracle query; nothing to load")
-        return 0
 
     logging.info("Loaded %s rows into %s", inserted, target_table)
     return inserted
