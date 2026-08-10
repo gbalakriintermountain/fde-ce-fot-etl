@@ -1,0 +1,98 @@
+# Configuration for the Oracle -> SQL Server data migration tool.
+# Values wrapped in ${...} are resolved from environment variables
+# (loaded from a local ".env" file - see .env.example).
+
+oracle:
+  user: ${ORACLE_USER}
+  password: ${ORACLE_PASSWORD}
+  dsn: ${ORACLE_DSN}
+
+sqlserver:
+  # Only the legacy "SQL Server" ODBC driver is installed on this machine.
+  # For better performance/security, install "ODBC Driver 17 for SQL Server"
+  # (or 18) from Microsoft and change this value.
+  driver: "SQL Server"
+  server: ${SQLSERVER_HOST}
+  port: ${SQLSERVER_PORT}
+  database: ${SQLSERVER_DATABASE}
+  user: ${SQLSERVER_USER}
+  password: ${SQLSERVER_PASSWORD}
+
+# List every table you want copied from Oracle to SQL Server.
+# - source: fully qualified Oracle table name (SCHEMA.TABLE)
+# - target: fully qualified SQL Server table name (schema.table) - must already exist
+# - where: optional SQL WHERE clause (without the "WHERE" keyword) to filter source rows
+# - batch_size: number of rows fetched/inserted per round trip
+# - pk: primary key column name as it appears in the SQL Server target table
+# - source_pk: the SAME primary key column as it appears in the Oracle source table
+#   (Oracle source columns are quoted-lowercase identifiers, and a few were renamed
+#   between Oracle and SQL Server, so pk and source_pk are not always identical)
+# Used by `--incremental` to find rows that exist in Oracle but not yet in SQL
+# Server, so only new/latest rows get appended.
+tables:
+  - source: "RAISERS_EDGE.FDN_RE_ADDRESS"
+    target: "dbo.ADDRESS"
+    pk: "Id"
+    source_pk: "id"
+    batch_size: 1000
+
+  - source: "RAISERS_EDGE.FDN_RE_APPEAL"
+    target: "dbo.APPEAL"
+    pk: "appealid"
+    source_pk: "appeal_id"
+    batch_size: 1000
+  
+  - source: "RAISERS_EDGE.FDN_RE_APPEAL_ATTRIBUTES"
+    target: "dbo.APPEALATTRIBUTES"
+    pk: "attributes_id"
+    source_pk: "attributes_id"
+    batch_size: 1000
+
+  - source: "RAISERS_EDGE.FDN_RE_ATTRIBUTE_TYPES"
+    target: "dbo.ATTRIBUTETYPES"
+    pk: "ATTRIBUTETYPESID"
+    source_pk: "attribute_types_id"
+    batch_size: 1000
+
+  - source: "RAISERS_EDGE.FDN_RE_CONSTIT_ADDRESS"
+    target: "dbo.CONSTIT_ADDRESS"
+    pk: "id"
+    source_pk: "id"
+    batch_size: 1000
+
+  - source: "RAISERS_EDGE.FDN_RE_CONSTIT_ADDRESS_PHONES"
+    target: "dbo.CONSTIT_ADDRESS_PHONES"
+    pk: "constit_address_phone_sid"
+    source_pk: "constit_address_phone_sid"
+    batch_size: 1000
+
+  - source: "RAISERS_EDGE.FDN_RE_GIFT"
+    target: "dbo.GIFT"
+    pk: "id"
+    source_pk: "id"
+    batch_size: 1000
+
+  - source: "RAISERS_EDGE.FDN_RE_GIFT_SPLIT"
+    target: "dbo.GIFTSPLIT"
+    pk: "gift_split_id"
+    source_pk: "gift_split_id"
+    batch_size: 1000
+
+  - source: "RAISERS_EDGE.FDN_RE_PHONES"
+    target: "dbo.PHONES"
+    pk: "PHONESID"
+    source_pk: "phones_id"
+    batch_size: 1000
+
+  - source: "RAISERS_EDGE.FDN_RE_RECORDS"
+    target: "dbo.RECORDS"
+    pk: "id"
+    source_pk: "id"
+    batch_size: 1000
+
+  - source: "RAISERS_EDGE.FDN_RE_TABLE_ENTRIES"
+    target: "dbo.TABLEENTRIES"
+    pk: "TABLEENTRIESID"
+    source_pk: "table_entries_id"
+    batch_size: 1000
+

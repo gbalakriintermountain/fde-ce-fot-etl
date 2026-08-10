@@ -1,0 +1,6 @@
+.env
+migration.log
+run_output*.log
+__pycache__/
+*.pyc
+.venv/
