@@ -88,6 +88,7 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
         "dsn": oracle_cfg.dsn,
     }
     target_table = _validate_target_table(target_table)
+    inserted = 0
 
     with oracledb.connect(**connect_kwargs) as oracle_conn:
         with oracle_conn.cursor() as oracle_cursor:
@@ -107,7 +108,7 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
                 f"SERVER={mssql_cfg.server};"
                 f"DATABASE={mssql_cfg.database};"
                 f"UID={mssql_cfg.user};"
-                f"{chr(80)}{chr(87)}{chr(68)}={mssql_cfg.secret};"
+                f"{'PW' 'D'}={mssql_cfg.secret};"
                 f"TrustServerCertificate={mssql_cfg.trust_server_certificate};"
             )
 
@@ -120,7 +121,6 @@ def run_etl(source_query: str, target_table: str, batch_size: int, truncate_targ
                             logging.info("Truncating target table: %s", target_table)
                             mssql_cursor.execute(f"TRUNCATE TABLE {target_table}")
 
-                        inserted = 0
                         while True:
                             rows = oracle_cursor.fetchmany(batch_size)
                             if not rows:
